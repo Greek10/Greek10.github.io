@@ -53,11 +53,13 @@ async def find_latest_image(channel: discord.TextChannel):
 
         for a in msg.attachments:
             if (a.content_type or "").startswith("image/"):
-                return f"{msg.id}:{edited}:{a.url}", a.url
+                sig = f"{msg.id}:{edited}:{a.url}"
+                return sig, a.url
 
         for e in msg.embeds:
             if e.image and e.image.url:
-                return f"{msg.id}:{edited}:{e.image.url}", e.image.url
+                sig = f"{msg.id}:{edited}:{e.image.url}"
+                return sig, e.image.url
 
     return None, None
 
@@ -123,27 +125,44 @@ async def archieved(
     )
 
     async def runner():
-        last_sig = None
+        last_sig = None  # persists across loop iterations
+
         async with aiohttp.ClientSession() as session:
             while True:
                 try:
                     sig, url = await find_latest_image(source_channel)
-                    if sig and url and sig != last_sig:
-                        last_sig = sig
-                        async with session.get(url) as r:
-                            r.raise_for_status()
-                            img = await r.read()
 
-                        await out_ch.send(
-                            content=f"🖼️ **Archived image**",
-                            file=discord.File(BytesIO(img), filename="archived.png")
-                        )
+                    # Nothing found
+                    if not sig or not url:
+                        await asyncio.sleep(POLL_SECONDS)
+                        continue
+
+                    # Image unchanged → do nothing
+                    if sig == last_sig:
+                        await asyncio.sleep(POLL_SECONDS)
+                        continue
+
+                    # Image changed → download & send
+                    async with session.get(url) as r:
+                        r.raise_for_status()
+                        img = await r.read()
+
+                    await out_ch.send(
+                        content="🖼️ **Archived image (updated)**",
+                        file=discord.File(BytesIO(img), filename="archived.png")
+                    )
+
+                    # Update signature ONLY after successful send
+                    last_sig = sig
 
                 except asyncio.CancelledError:
                     break
+
                 except Exception as e:
                     try:
-                        await out_ch.send(f"⚠️ /archieved error: `{type(e).__name__}: {e}`")
+                        await out_ch.send(
+                            f"⚠️ /archieved error: `{type(e).__name__}: {e}`"
+                        )
                     except Exception:
                         pass
 
