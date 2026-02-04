@@ -1,6 +1,7 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { Client, GatewayIntentBits } from "discord.js";
+import { Client, GatewayIntentBits, ChannelType } from "discord.js";
 
 const app = express();
 app.use(cors());
@@ -14,42 +15,63 @@ const client = new Client({
   ]
 });
 
+client.once("ready", () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
 client.login(process.env.DISCORD_TOKEN);
 
-// ---------------- API ROUTES ----------------
+// ---------- ROUTES ----------
 
-// Get all servers the bot is in
-app.get("/guilds", () => {
+// Servers
+app.get("/guilds", (req, res) => {
+  if (!client.isReady()) return res.json([]);
+
   const guilds = client.guilds.cache.map(g => ({
     id: g.id,
     name: g.name
   }));
-  return guilds;
+
+  res.json(guilds);
 });
 
-// Get channels in a server
-app.get("/channels/:guildId", async (req) => {
-  const guild = await client.guilds.fetch(req.params.guildId);
-  const channels = guild.channels.cache
-    .filter(c => c.isTextBased())
-    .map(c => ({
-      id: c.id,
-      name: c.name
-    }));
+// Channels
+app.get("/channels/:guildId", async (req, res) => {
+  try {
+    const guild = await client.guilds.fetch(req.params.guildId);
+    await guild.channels.fetch();
 
-  return channels;
+    const channels = guild.channels.cache
+      .filter(c => c.type === ChannelType.GuildText)
+      .map(c => ({
+        id: c.id,
+        name: c.name
+      }));
+
+    res.json(channels);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Get last 100 messages
-app.get("/messages/:channelId", async (req) => {
-  const channel = await client.channels.fetch(req.params.channelId);
-  const messages = await channel.messages.fetch({ limit: 100 });
+// Messages
+app.get("/messages/:channelId", async (req, res) => {
+  try {
+    const channel = await client.channels.fetch(req.params.channelId);
+    const messages = await channel.messages.fetch({ limit: 100 });
 
-  return messages.map(m => ({
-    author: m.author.username,
-    content: m.content,
-    timestamp: m.createdAt
-  })).reverse();
+    res.json(
+      messages
+        .map(m => ({
+          author: m.author.username,
+          content: m.content,
+          timestamp: m.createdTimestamp
+        }))
+        .reverse()
+    );
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(3000, () => {
