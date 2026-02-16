@@ -63,6 +63,47 @@ async def find_latest_image(channel: discord.TextChannel):
 
     return None, None
 
+
+import discord
+from discord import app_commands
+import random
+import os
+import sys
+
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+
+RANDOM_PHRASES = [
+    "I am inside your walls.",
+    "Skill issue.",
+    "No thoughts, head empty.",
+    "💀",
+    "That was definitely a choice.",
+    "Certified Discord moment.",
+    "I will not elaborate.",
+    "Chaos detected.",
+    "Bro really typed that.",
+    "This server scares me."
+]
+
+@client.event
+async def on_ready():
+    print(f"Logged in as {client.user}")
+    try:
+        await tree.sync()  # Global sync
+        print("Global slash commands synced.")
+    except Exception as e:
+        print(f"Sync error: {e}")
+
+@tree.command(
+    name="sayrandom",
+    description="Bot says something random"
+)
+async def sayrandom(interaction: discord.Interaction):
+    phrase = random.choice(RANDOM_PHRASES)
+    await interaction.response.send_message(phrase)
+
 # ================= /ARCHIEVED =================
 _active_archives: dict[tuple[int, int], asyncio.Task] = {}
 
